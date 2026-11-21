@@ -1,5 +1,5 @@
-// Leonida Cover Studio — editor wiring
-import { defaultState, drawCover, computeLayout } from "./cover.js";
+// Grand Leonida — editor behaviour: tray, panel editing, export.
+import { computeLayout, defaultState, drawCover } from "./cover.js";
 
 export const SIZES = {
   landscape: { w: 1920, h: 1080, label: "1920 × 1080" },
@@ -11,184 +11,195 @@ export function loadImage(url) {
   return new Promise((resolve, reject) => {
     const img = new Image();
     img.onload = () => resolve(img);
-    img.onerror = reject;
+    img.onerror = () => reject(new Error(`could not load ${url}`));
     img.src = url;
   });
 }
 
 export async function loadDefaultCast(state) {
-  await Promise.all(state.panels.map(async (p) => {
-    try { p.img = await loadImage(`samples/${p.file}`); } catch { p.img = null; }
+  await Promise.all(state.panels.map(async (panel) => {
+    try { panel.img = await loadImage(`samples/${panel.file}`); }
+    catch { panel.img = null; }
   }));
   return state;
 }
 
-function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+const clampTo = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
 export function initEditor() {
   const state = defaultState();
-  let selected = 0;
-  let format = "landscape";
+  let selectedIdx = 0;
+  let activeFormat = "landscape";
   const canvas = document.querySelector("#preview");
   const ctx = canvas.getContext("2d");
   const selName = document.querySelector("#selName");
   const statusEl = document.querySelector("#status");
-  const tagInput = document.querySelector("#tagInput");
-  const zoomInput = document.querySelector("#zoom");
+  const tagField = document.querySelector("#tagInput");
+  const zoomField = document.querySelector("#zoom");
   const tray = document.querySelector("#tray");
-  const setStatus = (t) => { if (statusEl) statusEl.textContent = t; };
+  const announce = (text) => { if (statusEl) statusEl.textContent = text; };
 
   function redraw() {
-    const size = SIZES[format];
+    const size = SIZES[activeFormat];
+    // Only touch the canvas size when the format actually changed:
+    // assigning width/height clears the bitmap and flickers on every pan.
     if (canvas.width !== size.w) canvas.width = size.w;
     if (canvas.height !== size.h) canvas.height = size.h;
-    drawCover(ctx, canvas.width, canvas.height, state);
-    const L = computeLayout(canvas.width, canvas.height);
-    const p = state.panels[selected];
-    const r = L.rects[p.id];
-    if (r) {
+    drawCover(ctx, size.w, size.h, state);
+    const layout = computeLayout(size.w, size.h);
+    const panel = state.panels[selectedIdx];
+    const rect = layout.rects[panel.id];
+    if (rect) {
       ctx.save();
-      ctx.strokeStyle = "#37e0c8";
-      ctx.lineWidth = Math.max(3, canvas.width * 0.0035);
-      ctx.setLineDash([canvas.width * 0.012, canvas.width * 0.008]);
-      ctx.strokeRect(r.x, r.y, r.w, r.h);
+      ctx.strokeStyle = "#3fe3cb";
+      ctx.lineWidth = Math.max(3, size.w * 0.0035);
+      ctx.setLineDash([size.w * 0.012, size.w * 0.008]);
+      ctx.strokeRect(rect.x, rect.y, rect.w, rect.h);
       ctx.restore();
     }
-    if (selName) selName.textContent = `${p.tag} — panel ${selected + 1} of 8`;
-    if (tagInput) tagInput.value = p.tag;
-    if (zoomInput) zoomInput.value = String(p.zoom);
+    if (selName) selName.textContent = `${panel.tag} — panel ${selectedIdx + 1} of ${state.panels.length}`;
+    if (tagField) tagField.value = panel.tag;
+    if (zoomField) zoomField.value = String(panel.zoom);
   }
 
-  function addThumb(img, label) {
+  function addToTray(img, label) {
     const btn = document.createElement("button");
-    btn.type = "button"; btn.className = "thumb";
-    const im = document.createElement("img");
-    im.src = img.src; im.alt = label;
-    const span = document.createElement("span");
-    span.textContent = label;
-    btn.appendChild(im); btn.appendChild(span);
+    btn.type = "button";
+    btn.className = "thumb";
+    const thumb = document.createElement("img");
+    thumb.src = img.src;
+    thumb.alt = label;
+    const caption = document.createElement("span");
+    caption.textContent = label;
+    btn.append(thumb, caption);
     btn.addEventListener("click", () => {
-      const p = state.panels[selected];
-      p.img = img;
-      setStatus(`${label} placed in ${p.tag}.`);
+      const panel = state.panels[selectedIdx];
+      panel.img = img;
+      announce(`${label} now sits in ${panel.tag}.`);
       redraw();
     });
     tray.appendChild(btn);
-    return btn;
   }
 
   loadDefaultCast(state).then(() => {
-    for (const p of state.panels) if (p.img) addThumb(p.img, p.tag);
+    for (const panel of state.panels) if (panel.img) addToTray(panel.img, panel.tag);
     redraw();
-    setStatus("Cast loaded — click a panel, then drag to pan it.");
+    announce("Cast is in — click a panel on the cover, then drag to pan its photo.");
   });
 
-  const upload = document.querySelector("#upload");
-  if (upload) upload.addEventListener("change", async () => {
-    const files = Array.from(upload.files || []);
-    for (const f of files) {
-      try {
-        const img = await loadImage(URL.createObjectURL(f));
-        addThumb(img, f.name.slice(0, 18));
-      } catch {}
+  const uploader = document.querySelector("#upload");
+  if (uploader) uploader.addEventListener("change", async () => {
+    const files = [...(uploader.files || [])];
+    for (const file of files) {
+      try { addToTray(await loadImage(URL.createObjectURL(file)), file.name.slice(0, 18)); }
+      catch { /* skip unreadable files */ }
     }
-    if (files.length) setStatus("Your photos were added to the tray — they never leave this device.");
-    upload.value = "";
+    if (files.length) announce("Added to the tray — and still only on this device.");
+    uploader.value = "";
   });
 
-  let drag = null;
+  // Pointer handling: click selects a panel, drag pans its photo.
+  let dragAt = null;
   canvas.addEventListener("pointerdown", (ev) => {
-    const rect = canvas.getBoundingClientRect();
-    const x = (ev.clientX - rect.left) * (canvas.width / rect.width);
-    const y = (ev.clientY - rect.top) * (canvas.height / rect.height);
-    const L = computeLayout(canvas.width, canvas.height);
-    for (let i = 0; i < state.panels.length; i++) {
-      const r = L.rects[state.panels[i].id];
-      if (r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) { selected = i; break; }
-    }
-    drag = { x: ev.clientX, y: ev.clientY };
+    const box = canvas.getBoundingClientRect();
+    const px = (ev.clientX - box.left) * (canvas.width / box.width);
+    const py = (ev.clientY - box.top) * (canvas.height / box.height);
+    const layout = computeLayout(canvas.width, canvas.height);
+    state.panels.forEach((panel, i) => {
+      const r = layout.rects[panel.id];
+      if (r && px >= r.x && px <= r.x + r.w && py >= r.y && py <= r.y + r.h) selectedIdx = i;
+    });
+    dragAt = { x: ev.clientX, y: ev.clientY };
     canvas.setPointerCapture(ev.pointerId);
     redraw();
   });
   canvas.addEventListener("pointermove", (ev) => {
-    if (!drag) return;
-    const rect = canvas.getBoundingClientRect();
-    const L = computeLayout(canvas.width, canvas.height);
-    const p = state.panels[selected];
-    const r = L.rects[p.id]; if (!r) return;
-    const dxPx = (ev.clientX - drag.x) * (canvas.width / rect.width);
-    const dyPx = (ev.clientY - drag.y) * (canvas.height / rect.height);
-    drag = { x: ev.clientX, y: ev.clientY };
-    p.dx = clamp(p.dx - (dxPx / r.w) * 0.6, -0.6, 0.6);
-    p.dy = clamp(p.dy - (dyPx / r.h) * 0.6, -0.6, 0.6);
+    if (!dragAt) return;
+    const box = canvas.getBoundingClientRect();
+    const layout = computeLayout(canvas.width, canvas.height);
+    const panel = state.panels[selectedIdx];
+    const r = layout.rects[panel.id];
+    if (!r) return;
+    const moveX = (ev.clientX - dragAt.x) * (canvas.width / box.width);
+    const moveY = (ev.clientY - dragAt.y) * (canvas.height / box.height);
+    dragAt = { x: ev.clientX, y: ev.clientY };
+    panel.dx = clampTo(panel.dx - (moveX / r.w) * 0.6, -0.6, 0.6);
+    panel.dy = clampTo(panel.dy - (moveY / r.h) * 0.6, -0.6, 0.6);
     redraw();
   });
-  const endDrag = () => { drag = null; };
-  canvas.addEventListener("pointerup", endDrag);
-  canvas.addEventListener("pointercancel", endDrag);
+  const stopDrag = () => { dragAt = null; };
+  canvas.addEventListener("pointerup", stopDrag);
+  canvas.addEventListener("pointercancel", stopDrag);
 
-  if (zoomInput) zoomInput.addEventListener("input", () => {
-    state.panels[selected].zoom = parseFloat(zoomInput.value) || 1;
+  if (zoomField) zoomField.addEventListener("input", () => {
+    state.panels[selectedIdx].zoom = parseFloat(zoomField.value) || 1;
     redraw();
   });
   const flipBtn = document.querySelector("#flip");
-  if (flipBtn) flipBtn.addEventListener("click", () => { state.panels[selected].flip = !state.panels[selected].flip; redraw(); });
+  if (flipBtn) flipBtn.addEventListener("click", () => {
+    const panel = state.panels[selectedIdx];
+    panel.flip = !panel.flip;
+    redraw();
+  });
   const resetBtn = document.querySelector("#resetPanel");
   if (resetBtn) resetBtn.addEventListener("click", () => {
-    const p = state.panels[selected]; p.dx = 0; p.dy = 0; p.zoom = 1; p.flip = false; redraw();
-  });
-
-  const bind = (sel, key) => {
-    const el = document.querySelector(sel);
-    if (el) el.addEventListener("input", () => { state[key] = el.value; redraw(); });
-  };
-  bind("#titleInput", "title");
-  bind("#scriptInput", "script");
-  bind("#taglineInput", "tagline");
-  bind("#quoteInput", "quote");
-  bind("#billingInput", "billing");
-  if (tagInput) tagInput.addEventListener("input", () => {
-    state.panels[selected].tag = tagInput.value.toUpperCase();
-    if (selName) selName.textContent = `${state.panels[selected].tag} — panel ${selected + 1} of 8`;
+    const panel = state.panels[selectedIdx];
+    panel.dx = 0; panel.dy = 0; panel.zoom = 1; panel.flip = false;
     redraw();
   });
 
-  document.querySelectorAll("[data-grade]").forEach((b) => {
-    b.addEventListener("click", () => {
-      state.grade = b.getAttribute("data-grade");
-      document.querySelectorAll("[data-grade]").forEach((x) => x.classList.toggle("on", x === b));
+  const bindText = (selector, key) => {
+    const el = document.querySelector(selector);
+    if (el) el.addEventListener("input", () => { state[key] = el.value; redraw(); });
+  };
+  bindText("#titleInput", "title");
+  bindText("#scriptInput", "script");
+  bindText("#taglineInput", "tagline");
+  bindText("#quoteInput", "quote");
+  bindText("#billingInput", "billing");
+  if (tagField) tagField.addEventListener("input", () => {
+    state.panels[selectedIdx].tag = tagField.value.toUpperCase();
+    redraw();
+  });
+
+  document.querySelectorAll("[data-grade]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      state.grade = btn.getAttribute("data-grade");
+      document.querySelectorAll("[data-grade]").forEach((other) => other.classList.toggle("on", other === btn));
       redraw();
     });
   });
-  document.querySelectorAll("[data-size]").forEach((b) => {
-    b.addEventListener("click", () => {
-      format = b.getAttribute("data-size");
-      document.querySelectorAll("[data-size]").forEach((x) => x.classList.toggle("on", x === b));
-      const s = SIZES[format]; canvas.width = s.w; canvas.height = s.h;
+  document.querySelectorAll("[data-size]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      activeFormat = btn.getAttribute("data-size");
+      document.querySelectorAll("[data-size]").forEach((other) => other.classList.toggle("on", other === btn));
       redraw();
     });
   });
 
-  function exportOne(fmt) {
-    const s = SIZES[fmt];
-    const c = document.createElement("canvas"); c.width = s.w; c.height = s.h;
-    drawCover(c.getContext("2d"), s.w, s.h, state);
-    c.toBlob((blob) => {
+  function downloadPng(fmt) {
+    const size = SIZES[fmt];
+    const off = document.createElement("canvas");
+    off.width = size.w; off.height = size.h;
+    drawCover(off.getContext("2d"), size.w, size.h, state);
+    off.toBlob((blob) => {
       if (!blob) return;
-      const name = `grand-leonida-${fmt}-${s.w}x${s.h}.png`;
-      const a = document.createElement("a");
-      a.href = URL.createObjectURL(blob); a.download = name; a.click();
-      setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-      setStatus(`Saved ${name}`);
+      const name = `grand-leonida-${fmt}-${size.w}x${size.h}.png`;
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = name;
+      link.click();
+      setTimeout(() => URL.revokeObjectURL(link.href), 4000);
+      announce(`Saved ${name}`);
     }, "image/png");
   }
-  const exOne = document.querySelector("#exportOne");
-  if (exOne) exOne.addEventListener("click", () => exportOne(format));
-  const exAll = document.querySelector("#exportAll");
-  if (exAll) exAll.addEventListener("click", () => {
-    exportOne("landscape");
-    setTimeout(() => exportOne("portrait"), 350);
-    setTimeout(() => exportOne("square"), 700);
+  const oneBtn = document.querySelector("#exportOne");
+  if (oneBtn) oneBtn.addEventListener("click", () => downloadPng(activeFormat));
+  const allBtn = document.querySelector("#exportAll");
+  if (allBtn) allBtn.addEventListener("click", () => {
+    downloadPng("landscape");
+    setTimeout(() => downloadPng("portrait"), 350);
+    setTimeout(() => downloadPng("square"), 700);
   });
 
   redraw();

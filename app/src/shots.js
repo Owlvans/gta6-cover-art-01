@@ -1,13 +1,13 @@
-// Shot routing: ?shot=cover renders the stage, otherwise the editor.
+// Screenshot routing: ?shot=cover fills the stage canvas with the
+// finished cover; anything else boots the interactive editor.
 import { defaultState, drawCover } from "./cover.js";
-import { SIZES, loadDefaultCast, initEditor } from "./editor.js";
+import { SIZES, initEditor, loadDefaultCast } from "./editor.js";
 
-const params = new URLSearchParams(location.search);
-const shot = params.get("shot");
-if (shot === "cover") {
+const query = new URLSearchParams(location.search);
+if (query.get("shot") === "cover") {
   document.body.classList.add("shot-cover");
-  const fmtParam = params.get("format") || "landscape";
-  const fmt = SIZES[fmtParam] ? fmtParam : "landscape";
+  const wanted = query.get("format") || "landscape";
+  const fmt = Object.hasOwn(SIZES, wanted) ? wanted : "landscape";
   const stage = document.querySelector("#stage");
   stage.hidden = false;
   stage.width = SIZES[fmt].w;
