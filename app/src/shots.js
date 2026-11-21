@@ -1,29 +1,23 @@
-// Shot-mode bootstrap, imported by index.html.
-//   ?shot=cover&format=landscape|portrait|square — the cover alone, painted
-//     at full export pixels on a stage canvas fitted to the window.
-//   ?shot=editor (or no query at all) — the full studio with the cast loaded.
-import { drawCover, defaultState } from './cover.js';
-import { initEditor, loadDefaultCast, SIZES } from './editor.js';
+// Shot routing: ?shot=cover renders the stage, otherwise the editor.
+import { defaultState, drawCover } from "./cover.js";
+import { SIZES, loadDefaultCast, initEditor } from "./editor.js";
 
-const q = new URLSearchParams(location.search);
-const shot = q.get('shot');
-
-if (shot === 'cover') {
-  document.body.classList.add('shot-cover');
-  const fmt = SIZES[q.get('format')] ? q.get('format') : 'landscape';
-  const { w, h } = SIZES[fmt];
-  const stage = document.getElementById('stage');
+const params = new URLSearchParams(location.search);
+const shot = params.get("shot");
+if (shot === "cover") {
+  document.body.classList.add("shot-cover");
+  const fmtParam = params.get("format") || "landscape";
+  const fmt = SIZES[fmtParam] ? fmtParam : "landscape";
+  const stage = document.querySelector("#stage");
   stage.hidden = false;
-  stage.width = w;
-  stage.height = h;
+  stage.width = SIZES[fmt].w;
+  stage.height = SIZES[fmt].h;
   const state = defaultState();
   loadDefaultCast(state).then(() => {
-    drawCover(stage.getContext('2d'), w, h, state);
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      window.__shotReady = true;
-    }));
+    drawCover(stage.getContext("2d"), stage.width, stage.height, state);
+    requestAnimationFrame(() => requestAnimationFrame(() => { window.__shotReady = true; }));
   });
 } else {
-  document.body.classList.add('shot-editor');
+  document.body.classList.add("shot-editor");
   initEditor();
 }

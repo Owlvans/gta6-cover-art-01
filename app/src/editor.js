@@ -1,12 +1,10 @@
-// Leonida Cover Studio — editor wiring.
-// Three steps: pick photos, write the caption, export. User photos are read
-// locally with object URLs and never leave the device.
-import { drawCover, defaultState, computeLayout, PANEL_DEFS } from './cover.js';
+// Leonida Cover Studio — editor wiring
+import { defaultState, drawCover, computeLayout } from "./cover.js";
 
 export const SIZES = {
-  landscape: { w: 1920, h: 1080, label: '1920 × 1080' },
-  portrait: { w: 1080, h: 1350, label: '1080 × 1350' },
-  square: { w: 1080, h: 1080, label: '1080 × 1080' },
+  landscape: { w: 1920, h: 1080, label: "1920 × 1080" },
+  portrait: { w: 1080, h: 1350, label: "1080 × 1350" },
+  square: { w: 1080, h: 1080, label: "1080 × 1080" },
 };
 
 export function loadImage(url) {
@@ -20,187 +18,177 @@ export function loadImage(url) {
 
 export async function loadDefaultCast(state) {
   await Promise.all(state.panels.map(async (p) => {
-    p.img = await loadImage(`samples/${p.file}`);
+    try { p.img = await loadImage(`samples/${p.file}`); } catch { p.img = null; }
   }));
+  return state;
 }
+
+function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
 
 export function initEditor() {
   const state = defaultState();
-  let selected = 0;               // index into state.panels
-  let format = 'landscape';
-  const canvas = document.getElementById('preview');
-  const ctx = canvas.getContext('2d');
-  const status = document.getElementById('status');
-  const tray = document.getElementById('tray');
-  const uploads = [];             // {name, img} user photos, local only
-
-  function setCanvasSize() {
-    const s = SIZES[format];
-    canvas.width = s.w; canvas.height = s.h;
-  }
-  setCanvasSize();
+  let selected = 0;
+  let format = "landscape";
+  const canvas = document.querySelector("#preview");
+  const ctx = canvas.getContext("2d");
+  const selName = document.querySelector("#selName");
+  const statusEl = document.querySelector("#status");
+  const tagInput = document.querySelector("#tagInput");
+  const zoomInput = document.querySelector("#zoom");
+  const tray = document.querySelector("#tray");
+  const setStatus = (t) => { if (statusEl) statusEl.textContent = t; };
 
   function redraw() {
+    const size = SIZES[format];
+    if (canvas.width !== size.w) canvas.width = size.w;
+    if (canvas.height !== size.h) canvas.height = size.h;
     drawCover(ctx, canvas.width, canvas.height, state);
-    // selection outline over the chosen panel
     const L = computeLayout(canvas.width, canvas.height);
-    const r = L.rects[state.panels[selected].id];
-    ctx.save();
-    ctx.strokeStyle = '#37e0c8';
-    ctx.lineWidth = Math.max(3, canvas.width * 0.0035);
-    ctx.setLineDash([canvas.width * 0.012, canvas.width * 0.008]);
-    ctx.strokeRect(r.x, r.y, r.w, r.h);
-    ctx.restore();
-    document.getElementById('selName').textContent =
-      `${state.panels[selected].tag} — panel ${selected + 1} of 8`;
-    document.getElementById('tagInput').value = state.panels[selected].tag;
-    document.getElementById('zoom').value = state.panels[selected].zoom;
+    const p = state.panels[selected];
+    const r = L.rects[p.id];
+    if (r) {
+      ctx.save();
+      ctx.strokeStyle = "#37e0c8";
+      ctx.lineWidth = Math.max(3, canvas.width * 0.0035);
+      ctx.setLineDash([canvas.width * 0.012, canvas.width * 0.008]);
+      ctx.strokeRect(r.x, r.y, r.w, r.h);
+      ctx.restore();
+    }
+    if (selName) selName.textContent = `${p.tag} — panel ${selected + 1} of 8`;
+    if (tagInput) tagInput.value = p.tag;
+    if (zoomInput) zoomInput.value = String(p.zoom);
   }
 
-  // ---- tray: the cast of eight, plus anything the user adds
-  function addThumb(img, label, onPick) {
-    const b = document.createElement('button');
-    b.type = 'button';
-    b.className = 'thumb';
-    const im = document.createElement('img');
-    im.src = img.currentSrc || img.src;
-    im.alt = label;
-    const cap = document.createElement('span');
-    cap.textContent = label;
-    b.append(im, cap);
-    b.addEventListener('click', () => {
-      state.panels[selected].img = img;
+  function addThumb(img, label) {
+    const btn = document.createElement("button");
+    btn.type = "button"; btn.className = "thumb";
+    const im = document.createElement("img");
+    im.src = img.src; im.alt = label;
+    const span = document.createElement("span");
+    span.textContent = label;
+    btn.appendChild(im); btn.appendChild(span);
+    btn.addEventListener("click", () => {
+      const p = state.panels[selected];
+      p.img = img;
+      setStatus(`${label} placed in ${p.tag}.`);
       redraw();
-      status.textContent = `${label} placed in ${state.panels[selected].tag}.`;
     });
-    tray.appendChild(b);
-    return b;
+    tray.appendChild(btn);
+    return btn;
   }
 
   loadDefaultCast(state).then(() => {
-    state.panels.forEach((p, i) => {
-      const def = PANEL_DEFS[i];
-      addThumb(p.img, def.tag, null);
-    });
+    for (const p of state.panels) if (p.img) addThumb(p.img, p.tag);
     redraw();
-    status.textContent = 'Cast loaded — click a panel, then drag to pan it.';
+    setStatus("Cast loaded — click a panel, then drag to pan it.");
   });
 
-  document.getElementById('upload').addEventListener('change', async (e) => {
-    for (const file of e.target.files) {
-      const img = await loadImage(URL.createObjectURL(file));
-      uploads.push({ name: file.name, img });
-      addThumb(img, file.name.slice(0, 18), null);
+  const upload = document.querySelector("#upload");
+  if (upload) upload.addEventListener("change", async () => {
+    const files = Array.from(upload.files || []);
+    for (const f of files) {
+      try {
+        const img = await loadImage(URL.createObjectURL(f));
+        addThumb(img, f.name.slice(0, 18));
+      } catch {}
     }
-    if (e.target.files.length) {
-      status.textContent = 'Your photos were added to the tray — they never leave this device.';
-    }
-    e.target.value = '';
+    if (files.length) setStatus("Your photos were added to the tray — they never leave this device.");
+    upload.value = "";
   });
 
-  // ---- preview interaction: click selects, drag pans
-  function toCanvas(ev) {
-    const r = canvas.getBoundingClientRect();
-    return {
-      x: (ev.clientX - r.left) * (canvas.width / r.width),
-      y: (ev.clientY - r.top) * (canvas.height / r.height),
-    };
-  }
   let drag = null;
-  canvas.addEventListener('pointerdown', (ev) => {
-    const pt = toCanvas(ev);
+  canvas.addEventListener("pointerdown", (ev) => {
+    const rect = canvas.getBoundingClientRect();
+    const x = (ev.clientX - rect.left) * (canvas.width / rect.width);
+    const y = (ev.clientY - rect.top) * (canvas.height / rect.height);
     const L = computeLayout(canvas.width, canvas.height);
     for (let i = 0; i < state.panels.length; i++) {
       const r = L.rects[state.panels[i].id];
-      if (pt.x >= r.x && pt.x <= r.x + r.w && pt.y >= r.y && pt.y <= r.y + r.h) {
-        selected = i;
-        drag = { x: pt.x, y: pt.y, r };
-        canvas.setPointerCapture(ev.pointerId);
-        redraw();
-        return;
-      }
+      if (r && x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h) { selected = i; break; }
     }
+    drag = { x: ev.clientX, y: ev.clientY };
+    canvas.setPointerCapture(ev.pointerId);
+    redraw();
   });
-  canvas.addEventListener('pointermove', (ev) => {
+  canvas.addEventListener("pointermove", (ev) => {
     if (!drag) return;
-    const pt = toCanvas(ev);
+    const rect = canvas.getBoundingClientRect();
+    const L = computeLayout(canvas.width, canvas.height);
     const p = state.panels[selected];
-    p.dx = Math.min(0.6, Math.max(-0.6, p.dx - (pt.x - drag.x) / drag.r.w * 0.6));
-    p.dy = Math.min(0.6, Math.max(-0.6, p.dy - (pt.y - drag.y) / drag.r.h * 0.6));
-    drag.x = pt.x; drag.y = pt.y;
+    const r = L.rects[p.id]; if (!r) return;
+    const dxPx = (ev.clientX - drag.x) * (canvas.width / rect.width);
+    const dyPx = (ev.clientY - drag.y) * (canvas.height / rect.height);
+    drag = { x: ev.clientX, y: ev.clientY };
+    p.dx = clamp(p.dx - (dxPx / r.w) * 0.6, -0.6, 0.6);
+    p.dy = clamp(p.dy - (dyPx / r.h) * 0.6, -0.6, 0.6);
     redraw();
   });
-  canvas.addEventListener('pointerup', () => { drag = null; });
+  const endDrag = () => { drag = null; };
+  canvas.addEventListener("pointerup", endDrag);
+  canvas.addEventListener("pointercancel", endDrag);
 
-  document.getElementById('zoom').addEventListener('input', (e) => {
-    state.panels[selected].zoom = Number(e.target.value);
+  if (zoomInput) zoomInput.addEventListener("input", () => {
+    state.panels[selected].zoom = parseFloat(zoomInput.value) || 1;
     redraw();
   });
-  document.getElementById('flip').addEventListener('click', () => {
-    state.panels[selected].flip = !state.panels[selected].flip;
-    redraw();
-  });
-  document.getElementById('resetPanel').addEventListener('click', () => {
-    const p = state.panels[selected];
-    p.dx = 0; p.dy = 0; p.zoom = 1; p.flip = false;
-    redraw();
-  });
-
-  // ---- caption fields
-  const bind = (id, key) => document.getElementById(id).addEventListener('input', (e) => {
-    state[key] = e.target.value;
-    redraw();
-  });
-  bind('titleInput', 'title');
-  bind('scriptInput', 'script');
-  bind('taglineInput', 'tagline');
-  bind('quoteInput', 'quote');
-  bind('billingInput', 'billing');
-  document.getElementById('tagInput').addEventListener('input', (e) => {
-    state.panels[selected].tag = e.target.value.toUpperCase();
-    redraw();
+  const flipBtn = document.querySelector("#flip");
+  if (flipBtn) flipBtn.addEventListener("click", () => { state.panels[selected].flip = !state.panels[selected].flip; redraw(); });
+  const resetBtn = document.querySelector("#resetPanel");
+  if (resetBtn) resetBtn.addEventListener("click", () => {
+    const p = state.panels[selected]; p.dx = 0; p.dy = 0; p.zoom = 1; p.flip = false; redraw();
   });
 
-  // ---- grades
-  document.querySelectorAll('[data-grade]').forEach((b) => {
-    b.addEventListener('click', () => {
-      state.grade = b.dataset.grade;
-      document.querySelectorAll('[data-grade]').forEach((x) =>
-        x.classList.toggle('on', x === b));
+  const bind = (sel, key) => {
+    const el = document.querySelector(sel);
+    if (el) el.addEventListener("input", () => { state[key] = el.value; redraw(); });
+  };
+  bind("#titleInput", "title");
+  bind("#scriptInput", "script");
+  bind("#taglineInput", "tagline");
+  bind("#quoteInput", "quote");
+  bind("#billingInput", "billing");
+  if (tagInput) tagInput.addEventListener("input", () => {
+    state.panels[selected].tag = tagInput.value.toUpperCase();
+    if (selName) selName.textContent = `${state.panels[selected].tag} — panel ${selected + 1} of 8`;
+    redraw();
+  });
+
+  document.querySelectorAll("[data-grade]").forEach((b) => {
+    b.addEventListener("click", () => {
+      state.grade = b.getAttribute("data-grade");
+      document.querySelectorAll("[data-grade]").forEach((x) => x.classList.toggle("on", x === b));
       redraw();
     });
   });
-
-  // ---- sizes + export
-  document.querySelectorAll('[data-size]').forEach((b) => {
-    b.addEventListener('click', () => {
-      format = b.dataset.size;
-      document.querySelectorAll('[data-size]').forEach((x) =>
-        x.classList.toggle('on', x === b));
-      setCanvasSize();
+  document.querySelectorAll("[data-size]").forEach((b) => {
+    b.addEventListener("click", () => {
+      format = b.getAttribute("data-size");
+      document.querySelectorAll("[data-size]").forEach((x) => x.classList.toggle("on", x === b));
+      const s = SIZES[format]; canvas.width = s.w; canvas.height = s.h;
       redraw();
     });
   });
 
   function exportOne(fmt) {
     const s = SIZES[fmt];
-    const c = document.createElement('canvas');
-    c.width = s.w; c.height = s.h;
-    drawCover(c.getContext('2d'), s.w, s.h, state);
+    const c = document.createElement("canvas"); c.width = s.w; c.height = s.h;
+    drawCover(c.getContext("2d"), s.w, s.h, state);
     c.toBlob((blob) => {
-      const a = document.createElement('a');
-      a.href = URL.createObjectURL(blob);
-      a.download = `grand-leonida-${fmt}-${s.w}x${s.h}.png`;
-      a.click();
+      if (!blob) return;
+      const name = `grand-leonida-${fmt}-${s.w}x${s.h}.png`;
+      const a = document.createElement("a");
+      a.href = URL.createObjectURL(blob); a.download = name; a.click();
       setTimeout(() => URL.revokeObjectURL(a.href), 4000);
-      status.textContent = `Saved ${a.download}`;
-    }, 'image/png');
+      setStatus(`Saved ${name}`);
+    }, "image/png");
   }
-  document.getElementById('exportOne').addEventListener('click', () => exportOne(format));
-  document.getElementById('exportAll').addEventListener('click', () => {
-    exportOne('landscape');
-    setTimeout(() => exportOne('portrait'), 350);
-    setTimeout(() => exportOne('square'), 700);
+  const exOne = document.querySelector("#exportOne");
+  if (exOne) exOne.addEventListener("click", () => exportOne(format));
+  const exAll = document.querySelector("#exportAll");
+  if (exAll) exAll.addEventListener("click", () => {
+    exportOne("landscape");
+    setTimeout(() => exportOne("portrait"), 350);
+    setTimeout(() => exportOne("square"), 700);
   });
 
   redraw();
