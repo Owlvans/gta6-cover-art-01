@@ -1,60 +1,29 @@
-// Fixed scenes for screenshots and shared links.
-//
-//   ?shot=cover&photo=<pier|boulevard>&layout=<id>&caption=<text>&size=<WxH>
-//     shows ONLY the finished cover, filling the viewport.
-//   ?shot=editor&photo=<...>&layout=<id>
-//     shows the full editor with that photo loaded into the panels.
-//
-// `photo` names the hero sample; multi-panel layouts bring in the other
-// sample too, so a duet shot always shows both bundled photographs. When the
-// scene has fully rendered, window.__ready (and __shotReady) become true.
+// Shot-mode bootstrap, imported by index.html.
+//   ?shot=cover&format=landscape|portrait|square — the cover alone, painted
+//     at full export pixels on a stage canvas fitted to the window.
+//   ?shot=editor (or no query at all) — the full studio with the cast loaded.
+import { drawCover, defaultState } from './cover.js';
+import { initEditor, loadDefaultCast, SIZES } from './editor.js';
 
-const FILL_ORDERS = {
-  poster: ['hero'],
-  duet: ['hero', 'other'],
-  triptych: ['hero', 'other', 'hero'],
-  quad: ['hero', 'other', 'other', 'hero'],
-};
+const q = new URLSearchParams(location.search);
+const shot = q.get('shot');
 
-export function parseSize(raw, fallback) {
-  const m = /^(\d{3,4})x(\d{3,4})$/.exec(raw ?? '');
-  if (!m) return fallback;
-  return { w: Number(m[1]), h: Number(m[2]) };
-}
-
-/**
- * Applies a ?shot= scene through the editor's own controls (`api`), so a
- * screenshot shows exactly what a user would get by hand.
- */
-export async function applyShot(query, api) {
-  const mode = query.get('shot');
-  const heroId = query.get('photo') === 'boulevard' ? 'boulevard' : 'pier';
-  const otherId = heroId === 'pier' ? 'boulevard' : 'pier';
-  const layoutId = query.get('layout') ?? (mode === 'editor' ? 'duet' : 'poster');
-
-  await api.loadSamples();
-  api.setLayout(layoutId);
-  const order = FILL_ORDERS[layoutId] ?? FILL_ORDERS.poster;
-  order.forEach((slot, i) => {
-    api.assignPanel(i, slot === 'hero' ? heroId : otherId);
+if (shot === 'cover') {
+  document.body.classList.add('shot-cover');
+  const fmt = SIZES[q.get('format')] ? q.get('format') : 'landscape';
+  const { w, h } = SIZES[fmt];
+  const stage = document.getElementById('stage');
+  stage.hidden = false;
+  stage.width = w;
+  stage.height = h;
+  const state = defaultState();
+  loadDefaultCast(state).then(() => {
+    drawCover(stage.getContext('2d'), w, h, state);
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      window.__shotReady = true;
+    }));
   });
-  api.selectPanel(0);
-
-  const caption = query.get('caption');
-  const title = query.get('title') ?? caption;
-  if (title) api.setTitle(title);
-  const subtitle = query.get('subtitle');
-  if (subtitle) api.setSubtitle(subtitle);
-  const grade = query.get('grade');
-  if (grade) api.setGrade(grade);
-
-  if (mode === 'cover') {
-    const size = parseSize(query.get('size'), { w: 1080, h: 1080 });
-    api.setSize(size.w, size.h);
-    api.enterCoverMode();
-  }
-  api.redraw();
-  await api.whenPainted();
-  window.__ready = true;
-  window.__shotReady = true;
+} else {
+  document.body.classList.add('shot-editor');
+  initEditor();
 }
