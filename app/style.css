@@ -1,76 +1,35 @@
-/* Leonida Cover Studio — dark three-column studio around the cover canvas. */
 * { box-sizing: border-box; }
-html, body { margin: 0; min-height: 100%; }
-body {
-  background: #0d0714;
-  color: #f2ead8;
-  font: 15px/1.45 "Helvetica Neue", system-ui, sans-serif;
-}
-.studio {
-  display: grid;
-  grid-template-columns: 264px 1fr 300px;
-  gap: 20px;
-  padding: 20px;
-  max-width: 1720px;
-  margin: 0 auto;
-  align-items: start;
-}
-.col h1 {
-  margin: 0 0 8px;
-  font: 900 34px/1.02 "Arial Narrow", Impact, sans-serif;
-  letter-spacing: 0.5px;
-  background: linear-gradient(180deg, #fff3c4, #ffb02e 38%, #ff5e62 66%, #e83e9e 88%, #7b2ff7);
-  -webkit-background-clip: text;
-  background-clip: text;
-  color: transparent;
-}
-.col h2 { margin: 20px 0 10px; font: 700 17px "Arial Narrow", sans-serif; letter-spacing: 1.5px; color: #ffcf5e; text-transform: uppercase; }
-.col h3 { margin: 16px 0 8px; font-size: 13px; letter-spacing: 1px; color: #cfc4d8; text-transform: uppercase; }
-.lede { color: #bdb2cc; margin: 0 0 4px; }
+body { background: #0d0714; color: #f2ead8; font: 15px/1.45 'Helvetica Neue', system-ui, sans-serif; margin: 0; }
+.studio { display: grid; grid-template-columns: 264px 1fr 300px; gap: 20px; padding: 20px; max-width: 1720px; margin: 0 auto; align-items: start; }
+h1 { font: 900 34px/1.02 'Arial Narrow', Impact, sans-serif; background: linear-gradient(180deg, #fff3c4 0%, #ffb02e 34%, #ff5e62 62%, #e83e9e 82%, #7b2ff7 100%); -webkit-background-clip: text; background-clip: text; color: transparent; margin: 0 0 10px; }
+h2 { font: 700 17px 'Arial Narrow', sans-serif; letter-spacing: 1.5px; color: #ffcf5e; text-transform: uppercase; margin: 18px 0 10px; }
+h3 { font-size: 13px; color: #cfc4d8; text-transform: uppercase; letter-spacing: 1px; margin: 14px 0 8px; }
+.lede { color: #bdb2cc; margin: 0 0 6px; }
 .note, .hint { color: #8f84a3; font-size: 13px; }
 .tray { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.thumb {
-  padding: 0; border: 2px solid #33234a; border-radius: 8px; overflow: hidden;
-  background: #1a0f2a; cursor: pointer; color: #f2ead8; text-align: left;
-}
-.thumb:hover { border-color: #ffcf5e; }
+.thumb { border: 2px solid #33234a; border-radius: 8px; background: #1a0f2a; padding: 0; overflow: hidden; cursor: pointer; text-align: left; color: #f2ead8; }
 .thumb img { display: block; width: 100%; height: 74px; object-fit: cover; }
-.thumb span { display: block; padding: 4px 6px; font: 700 10.5px "Arial Narrow", sans-serif; letter-spacing: 0.6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.upload {
-  display: block; margin-top: 12px; padding: 10px; text-align: center;
-  border: 1px dashed #6b558f; border-radius: 8px; cursor: pointer; font-weight: 700;
-}
-.upload:hover { border-color: #ff6ec7; color: #ff6ec7; }
+.thumb span { display: block; font: 700 10.5px 'Arial Narrow', sans-serif; padding: 4px 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.thumb:hover { border-color: #ffcf5e; }
+.upload { display: block; border: 2px dashed #6b558f; border-radius: 8px; padding: 10px; text-align: center; font-weight: 700; cursor: pointer; margin-top: 10px; }
 .upload input { display: none; }
-.centre { display: flex; flex-direction: column; gap: 10px; align-items: stretch; }
-#preview {
-  width: 100%; height: auto; display: block; cursor: grab;
-  box-shadow: 0 14px 44px rgba(0, 0, 0, 0.6);
-  border: 1px solid #33234a; background: #0d0714;
-}
+.upload:hover { border-color: #ff6ec7; color: #ff6ec7; }
+.centre { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+#preview { width: 100%; height: auto; cursor: grab; box-shadow: 0 12px 40px rgba(0,0,0,.6); border: 1px solid #33234a; background: #0d0714; }
 #preview:active { cursor: grabbing; }
-.selname { margin: 0; font: 700 14px "Arial Narrow", sans-serif; letter-spacing: 1px; color: #37e0c8; }
-.paneltools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-.paneltools label { display: flex; gap: 8px; align-items: center; font-weight: 600; }
-#status { margin: 0; color: #bdb2cc; min-height: 1.4em; }
-.right label { display: flex; flex-direction: column; gap: 5px; font-weight: 600; margin-bottom: 10px; color: #cfc4d8; font-size: 13px; }
-.right input[type="text"] {
-  font: 15px "Helvetica Neue", system-ui, sans-serif; padding: 8px 10px;
-  background: #1a0f2a; color: #fff; border: 1px solid #3d2a5c; border-radius: 6px;
-}
-.right input[type="text"]:focus { outline: 2px solid #ff2ea6; border-color: transparent; }
-.row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 6px; }
-button {
-  font: 700 13.5px "Helvetica Neue", system-ui, sans-serif; padding: 9px 12px;
-  border: 1px solid #3d2a5c; border-radius: 7px; background: #221538; color: #f2ead8; cursor: pointer;
-}
+.selname { font: 700 14px 'Arial Narrow', sans-serif; letter-spacing: 1px; color: #37e0c8; margin: 0; }
+.paneltools { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+#status { color: #bdb2cc; min-height: 1.4em; margin: 0; }
+.right label { display: flex; flex-direction: column; gap: 5px; font-weight: 600; font-size: 13px; color: #cfc4d8; margin-bottom: 10px; }
+.right input[type="text"] { font-size: 15px; padding: 8px 10px; background: #1a0f2a; color: #fff; border: 1px solid #3d2a5c; border-radius: 6px; }
+.right input[type="text"]:focus { outline: 2px solid #ff2ea6; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; }
+button { font-weight: 700; font-size: 13.5px; padding: 9px 12px; border: 1px solid #3d2a5c; border-radius: 7px; background: #221538; color: #f2ead8; cursor: pointer; }
 button:hover { border-color: #ffcf5e; }
 button.on { background: #ff2ea6; border-color: #ff2ea6; color: #fff; }
 button.big { width: 100%; margin-top: 10px; padding: 13px; font-size: 15px; background: #f5b921; border-color: #f5b921; color: #241300; }
 button.big.ghost { background: transparent; color: #ffcf5e; border-color: #ffcf5e; }
 input[type="range"] { accent-color: #ff2ea6; width: 150px; }
-
-/* shot mode: nothing but the cover itself */
 body.shot-cover .studio { display: none; }
 body.shot-cover { background: #0d0714; }
 #stage { display: block; width: 100vw; height: 100vh; object-fit: contain; }
