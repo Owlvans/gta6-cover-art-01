@@ -1,38 +1,40 @@
-// Leonida Cover Studio — hand-in program for gta6-cover-art-01 (Node 22, standard library only).
-// The app itself lives in app/ as plain static files that run offline in a desktop browser:
-// a GTA-style cover art maker with polygon-panel collages, per-panel photo framing, colour
-// grades and poster lettering, exporting PNG covers at 1080x1080, 1080x1350 and 1920x1080.
-// This program copies app/ and screenshots/ from beside this file into the output directory
-// and writes dossier.json there with the vendored make.fun library, so the judge reads exactly
-// the bytes that were handed in.
+// Leonida Cover Lab — hand-in program (Node 22, standard library only).
 //
-// Try it locally first:  node serve.ts   then open http://localhost:8080
-// Hand it in locally:    mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+// The app itself is the static bundle under app/: plain files a desktop
+// browser runs fully offline. This program's one job is delivery — copy
+// app/ and screenshots/ into the output directory and stamp the dossier
+// the judge reads, using the vendored make.fun library, byte for byte the
+// way the scorer rebuilds it.
+//
+//   mkdir -p out && MAKEFUN_OUTPUT_DIR=out node main.ts
+//
+// Outside the grader, MAKEFUN_OUTPUT_DIR stands in for /output.
 
 import { cpSync, existsSync, mkdirSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { buildDossier } from './vendor/makefun-app.ts';
 
-const entryDirectory = fileURLToPath(new URL('.', import.meta.url));
-const outputDirectory = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
+const repoRoot = fileURLToPath(new URL('.', import.meta.url));
+const outputDir = process.env.MAKEFUN_OUTPUT_DIR ?? '/output';
 
-mkdirSync(outputDirectory, { recursive: true });
-cpSync(join(entryDirectory, 'app'), join(outputDirectory, 'app'), { recursive: true });
-mkdirSync(join(outputDirectory, 'screenshots'), { recursive: true });
-if (existsSync(join(entryDirectory, 'screenshots'))) {
-  cpSync(join(entryDirectory, 'screenshots'), join(outputDirectory, 'screenshots'), { recursive: true });
+// Fresh output tree: the app first, then the screenshots beside it.
+mkdirSync(outputDir, { recursive: true });
+cpSync(join(repoRoot, 'app'), join(outputDir, 'app'), { recursive: true });
+mkdirSync(join(outputDir, 'screenshots'), { recursive: true });
+const shotsDir = join(repoRoot, 'screenshots');
+if (existsSync(shotsDir)) {
+  cpSync(shotsDir, join(outputDir, 'screenshots'), { recursive: true });
 }
 
-// The dossier caps come from the bounty's gate: the text cap shapes the dossier bytes, the rest
-// make this program refuse anything the scorer would refuse anyway.
-writeFileSync(
-  join(outputDirectory, 'dossier.json'),
-  buildDossier(outputDirectory, {
-    text_max_bytes: 163840,
-    screenshots: { max: 4, max_bytes: 262144 },
-    app_max_files: 993,
-    app_max_bytes: 50331648,
-    app_path_max_bytes: 1000,
-  }),
-);
+// The caps below mirror the gate's own limits, so a local run refuses
+// exactly what the scorer would refuse: at most 4 screenshots of 256 KiB,
+// at most 993 app files totalling 48 MiB, no app path over 1000 bytes.
+const dossier = buildDossier(outputDir, {
+  text_max_bytes: 163840,
+  screenshots: { max: 4, max_bytes: 262144 },
+  app_max_files: 993,
+  app_max_bytes: 50331648,
+  app_path_max_bytes: 1000,
+});
+writeFileSync(join(outputDir, 'dossier.json'), dossier);
