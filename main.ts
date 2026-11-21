@@ -1,35 +1,37 @@
+// Grand Leonida — Leonida Cover Studio: handover driver.
+// Copies the static app and its screenshots into the output directory,
+// then writes a dossier describing exactly what was handed over.
 import { cpSync, mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { buildDossier } from "./vendor/makefun-app.ts";
 
-const root = fileURLToPath(new URL(".", import.meta.url));
+const here = fileURLToPath(new URL(".", import.meta.url));
 const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
 mkdirSync(outDir, { recursive: true });
 
-const appSrc = join(root, "app");
-const shotsSrc = join(root, "screenshots");
-cpSync(appSrc, join(outDir, "app"), { recursive: true });
-cpSync(shotsSrc, join(outDir, "screenshots"), { recursive: true });
+cpSync(join(here, "app"), join(outDir, "app"), { recursive: true });
+cpSync(join(here, "screenshots"), join(outDir, "screenshots"), { recursive: true });
 
-function walk(dir: string): string[] {
-  const out: string[] = [];
-  for (const e of readdirSync(dir, { withFileTypes: true })) {
-    const p = join(dir, e.name);
-    if (e.isDirectory()) out.push(...walk(p));
-    else out.push(p);
+function collect(dir: string, acc: string[] = []): string[] {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = join(dir, entry.name);
+    if (entry.isDirectory()) collect(full, acc);
+    else acc.push(full);
   }
-  return out;
+  return acc;
 }
 
-const shotFiles = walk(join(outDir, "screenshots")).filter((f) => /\.(png|jpe?g)$/i.test(f));
-if (shotFiles.length < 3) {
-  throw new Error(`leonida-cover-studio: refusing handover, only ${shotFiles.length} screenshots`);
+const shotList = collect(join(outDir, "screenshots"))
+  .filter((f) => /\.(png|jpe?g)$/i.test(f))
+  .sort();
+if (shotList.length < 3) {
+  throw new Error(`grand-leonida: handover refused, only ${shotList.length} screenshot(s) found`);
 }
-let totalBytes = 0;
-for (const f of shotFiles) totalBytes += statSync(f).size;
-const appEntries = walk(join(outDir, "app")).length;
-console.log(`leonida-cover-studio: ${shotFiles.length} screenshots (${totalBytes} bytes), ${appEntries} app entries -> ${outDir}`);
+const shotBytes = shotList.reduce((sum, f) => sum + statSync(f).size, 0);
+const appFiles = collect(join(outDir, "app")).sort();
+console.log(`grand-leonida: ${shotList.length} screenshots (${shotBytes} bytes), ${appFiles.length} app files -> ${outDir}`);
+for (const f of shotList) console.log(`grand-leonida: shot ${f.split("/").pop()} ${statSync(f).size} bytes`);
 
 const dossier = buildDossier(outDir, {
   text_max_bytes: 163840,
